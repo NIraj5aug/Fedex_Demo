@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html>
+<!--From https://codepen.io/frytyler/pen/EGdtg-->
+
+<head>
+  <meta charset="UTF-8">
+  <title>FedEx Model</title>
+  <link href="https://fonts.googleapis.com/css?family=Pacifico" rel="stylesheet" type="text/css">
+  <link href="https://fonts.googleapis.com/css?family=Arimo" rel="stylesheet" type="text/css">
+  <link href='https://fonts.googleapis.com/css?family=Hind:300' rel='stylesheet' type='text/css'>
+  <link href='https://fonts.googleapis.com/css?family=Open+Sans+Condensed:300' rel='stylesheet' type='text/css'>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+
+</head>
+
+<h1>FedEx Model</h1>
+
+<body>
+  <br>
+  <div class="login">
+
+    <h2>Predict Package Type</h2>
+
+    <!-- Main Input For Receiving Query to our ML -->
+    <form action="{{ url_for('predict')}}" method="post">
+
+      <input type="text" name="pkg_weight" placeholder="Package Weight" required="required" />
+      <input type="text" name='pkg_length' placeholder="Package Length" required="required" />
+      <input type="text" name='pkg_width' placeholder="Package Width" required="required" />
+      <input type="text" name='pkg_height' placeholder="Package Height" required="required" />
+      <input type="text" name='origin' placeholder="Origin" required="required" />
+      <input type="text" name='pkg_cube' placeholder="Package Cube" required="required" />
+      <input type="text" name='gvwr' placeholder="GVWR" required="required" />
+      <input type="text" name='trailer_height' placeholder="Trailer Height" required="required" />
+      <input type="text" name='total_packages' placeholder="Total Packages" required="required" />
+      <input type="text" name='pkg_height' placeholder="Avg_Package_per_day" required="required" />
+      <br>
+      <br>
+      <br>
+
+      <button type="submit" class="btn btn-primary btn-block btn-large">Predict</button>
+      <br>
+
+      {{ prediction_text }}
+
+      <br>
+
+      <div style="position:relative; right:-700px; top:-400px;">
+
+        <br>
+
+    </form>
+
+    <h3>File Upload</h3>
+    <form method="POST" action="/transform" enctype="multipart/form-data">
+      <p><input type="file" name="file" class=class="btn btn-primary btn-block btn-large" /></p>
+      </br>
+      <button type="submit" class="btn btn-primary btn-block btn-large">Predict</button>
+    </form>
+
+  </div>
+
+</body>
+
+</html>
