@@ -1,0 +1,253 @@
+# Docker
+# Build a Docker image 
+# https://docs.microsoft.com/azure/devops/pipelines/languages/docker.
+
+trigger:
+- master
+
+resources:
+- repo: self
+
+variables:
+  tag: '$(Build.BuildId)'
+  imageRepository: fedexmodel
+  dockerRegistryServiceConnection: fedexcr-service-connection
+  cluster-connection: kubernetes-service-connection
+  
+stages:
+- stage: Build
+  displayName: Build
+  jobs:  
+  - job: Build
+    displayName: Build
+    pool:
+      vmImage: 'ubuntu-latest'
+    steps:
+      - task: Docker@2
+        displayName: Build and push an image to container registry
+        inputs:
+          command: buildAndPush
+          repository: $(imageRepository)
+          dockerfile: '**/Dockerfile'
+          containerRegistry: $(dockerRegistryServiceConnection)
+          tags: |
+            $(tag)
+
+      - task: PublishPipelineArtifact@1
+        inputs:
+          targetPath: 
+          artifact: 'manifests'
+          publishLocation: 'pipeline'
+
+
+- stage: Dev
+  displayName: Dev
+  dependsOn: Build
+  jobs:  
+  - job: Deploy
+    displayName: Deploy
+    pool:
+      vmImage: 'ubuntu-latest'
+    steps:
+    - task: SSH@0
+      displayName: 'Run shell commands on remote machine'
+      inputs:
+        sshEndpoint: 'bertvm-service-connection'
+        runOptions: 'commands'
+        commands: |
+          sudo az acr login --name fedexcr001
+          # sudo docker stop fedexdemoapp
+          # sudo docker container rm fedexdemoapp -f
+          # sudo docker image prune -f
+          sudo docker pull fedexcr001.azurecr.io/fedexmodel:$(tag)
+          sudo docker run -d --name fedexdemoapp -p 5000:5000 fedexcr001.azurecr.io/fedexmodel:$(tag)
+        readyTimeout: '20000'
+
+- stage: Testing
+  displayName: Testing
+  dependsOn: Build
+  jobs:  
+  - job: Testing
+    displayName: Testing
+    pool:
+      vmImage: 'ubuntu-latest'
+    steps:
+    - task: SSH@0
+      displayName: 'Run shell commands on remote machine'
+      inputs:
+        sshEndpoint: 'bertvm-service-connection'
+        runOptions: 'commands'
+        commands: |
+          sudo az acr login --name fedexcr001
+          # sudo docker stop fedexdemoapp
+          # sudo docker container rm fedexdemoapp -f
+          # sudo docker image prune -f
+          sudo docker pull fedexcr001.azurecr.io/fedexmodel:$(tag)
+          sudo docker run -d --name fedexdemoapp01 -p 5001:5001 fedexcr001.azurecr.io/fedexmodel:$(tag)
+        readyTimeout: '20000'
+
+- stage: Acceptance
+  displayName: Acceptance
+  dependsOn: Build
+  jobs:  
+  - job: Acceptance
+    displayName: Acceptance
+    pool:
+      vmImage: 'ubuntu-latest'
+    steps:
+    - task: SSH@0
+      displayName: 'Run shell commands on remote machine'
+      inputs:
+        sshEndpoint: 'bertvm-service-connection'
+        runOptions: 'commands'
+        commands: |
+          sudo az acr login --name fedexcr001
+          # sudo docker stop fedexdemoapp
+          # sudo docker container rm fedexdemoapp -f
+          # sudo docker image prune -f
+          sudo docker pull fedexcr001.azurecr.io/fedexmodel:$(tag)
+          sudo docker run -d --name fedexdemoapp02 -p 5002:5002 fedexcr001.azurecr.io/fedexmodel:$(tag)
+        readyTimeout: '20000'
+
+
+- stage: Approval
+  displayName: Approval
+  jobs:  
+
+  - job: waitForValidation
+    displayName: Wait for external validation
+    pool: server
+    timeoutInMinutes: 4320 # job times out in 3 days
+    steps:
+      - task: ManualValidation@0
+        timeoutInMinutes: 1440 # task times out in 1 day
+        inputs:
+          notifyUsers: 'niraj-kumar@hcl.com'
+          instructions: 'Please validate the build configuration and resume'
+          onTimeout: 'resume'
+
+
+# - stage: Prod
+#   displayName: Prod
+#   jobs:  
+
+  # - job: Deploy
+  #   displayName: Deploy
+  #   pool:
+  #     vmImage: 'ubuntu-latest'
+
+    # steps:  
+    # - task: SSH@0
+    #   displayName: 'Run shell commands on remote machine'
+    #   inputs:
+    #     sshEndpoint: 'bertvm-service-connection'
+    #     runOptions: 'commands'
+    #     commands: |
+    #       sudo az acr login --name fedexcr001
+    #       sudo docker stop fedexdemoapp
+    #       sudo docker system prune -f
+    #       sudo docker pull fedexcr001.azurecr.io/fedexmodel:$(tag)
+    #       sudo docker run -d --name fedexdemoapp -p 5000:5000 fedexcr001.azurecr.io/fedexmodel:$(tag)
+    #     readyTimeout: '20000'
+
+
+      # - task: CopyFiles@2
+      #   inputs:
+      #    SourceFolder: 
+      #     Contents: |
+      #         app.yml 
+      #         service.yml
+      #     TargetFolder: '$(Build.ArtifactStagingDirectory)'
+
+
+      # - task: KubernetesManifest@0
+      #   displayName: Deploy K8s manifests
+      #   inputs:
+      #     kubernetesServiceConnection: kubernetes-service-connection
+      #     namespace: default
+      #     manifests: 
+      #       $(Build.ArtifactStagingDirectory)/app.yaml
+      #       $(Build.ArtifactStagingDirectory)/service.yaml
+      #     containers: |
+      #       fedexcr001.azurecr.io/fedexmodel
+
+
+# - stage: Deploy
+#   displayName: Prod
+#   dependsOn: Build
+#   jobs:
+#   - deployment: Deploy
+#     displayName: Deploy job
+#     pool:
+#       vmImage: 'ubuntu-latest'
+#     environment: 'default'
+#     strategy:
+#       runOnce:
+#         deploy:
+#           steps:
+#           - task: DownloadPipelineArtifact@2
+#             inputs:
+#               buildType: 'current'
+#               targetPath: '$(System.ArtifactsDirectory)'
+
+          # - task: KubernetesManifest@0
+          #   displayName: Create imagePullSecret
+          #   inputs:
+          #     action: 'createSecret'
+          #     kubernetesServiceConnection: 'kubernetes-service-connection'
+          #     namespace: 'default'
+          #     secretType: 'dockerRegistry'
+          #     secretName: '$(imagePullSecret)'
+          #     dockerRegistryEndpoint: '$(dockerRegistryServiceConnection)'
+              
+    #       - task: KubernetesManifest@0
+    #         displayName: Deploy to Kubernetes cluster
+    #         inputs:
+    #           action: 'deploy'
+    #           kubernetesServiceConnection: 'kubernetes-service-connection'
+    #           namespace: 'default'
+    #           manifests: |
+    #             $(System.ArtifactsDirectory)/app.yml
+    #             $(System.ArtifactsDirectory)/service.yml
+    #           containers: 'fedexcr001.azurecr.io/fedexmodel:$(tag)'
+    #           imagePullSecrets: '$(imagePullSecret)'
+    #           $(containerRegistry)/$(imageRepository):$(tag)
+
+
+- stage: Deploy
+  displayName: Prod
+  dependsOn: Approval
+  jobs:
+  - deployment: Deploy
+    displayName: Deploy job
+    pool:
+      vmImage: 'ubuntu-latest'
+    environment: 'default'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - task: DownloadPipelineArtifact@2
+            inputs:
+              buildType: 'current'
+              artifactName: 'manifests'
+              targetPath: '$(System.ArtifactsDirectory)/manifests'
+
+          # - task: KubernetesManifest@0
+          #   displayName: Create imagePullSecret
+          #   inputs:
+          #     action: createSecret
+          #     secretName: $(imagePullSecret)
+          #     namespace: $(k8sNamespace)
+          #     dockerRegistryEndpoint: $(dockerRegistryServiceConnection)
+              
+          - task: KubernetesManifest@0
+            displayName: Deploy to Kubernetes cluster
+            inputs:
+              action: 'deploy'
+              kubernetesServiceConnection: 'kubernetes-service-connection'
+              namespace: 'default'
+              manifests: |
+                $(System.ArtifactsDirectory)/manifests/app.yml
+                $(System.ArtifactsDirectory)/manifests/service.yml
+              containers: 'fedexcr001.azurecr.io/fedexmodel:$(tag)'
